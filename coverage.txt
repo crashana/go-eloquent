@@ -1,8 +1,0 @@
-github.com/crashana/go-eloquent/tests/models/test_models.go:27:		NewUser		100.0%
-github.com/crashana/go-eloquent/tests/models/test_models.go:69:		NewPost		100.0%
-github.com/crashana/go-eloquent/tests/models/test_models.go:90:		Author		0.0%
-github.com/crashana/go-eloquent/tests/models/test_models.go:113:	NewProfile	100.0%
-github.com/crashana/go-eloquent/tests/models/test_models.go:133:	User		0.0%
-github.com/crashana/go-eloquent/tests/models/test_models.go:144:	Posts		0.0%
-github.com/crashana/go-eloquent/tests/models/test_models.go:149:	Profile		0.0%
-total:									(statements)	60.0%

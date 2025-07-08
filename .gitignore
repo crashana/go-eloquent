@@ -44,3 +44,19 @@ Thumbs.db
 tmp/
 temp/ 
 /Examples/.env
+
+# Coverage reports
+coverage.html
+coverage.txt
+coverage.out
+
+# Build artifacts
+bin/
+build/
+
+# Test artifacts
+*.test
+results.sarif
+
+# Benchmark results
+benchmark.txt
