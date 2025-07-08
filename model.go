@@ -73,6 +73,9 @@ type BaseModel struct {
 
 	// Relationships
 	relations map[string]interface{}
+
+	// Reference to the parent model that embeds this BaseModel
+	parentModel Model
 }
 
 // ModelQueryBuilder wraps QueryBuilder and returns model instances
@@ -298,6 +301,9 @@ func (mqb *ModelQueryBuilder) fillModelFromMap(model Model, data map[string]inte
 		baseModel.exists = true
 		baseModel.wasRecentlyCreated = false
 
+		// Set reference to the parent model for attribute syncing
+		baseModel.parentModel = model
+
 		// Copy table configuration from the template model
 		if mqb.model != nil {
 			baseModel.table = mqb.model.GetTable()
@@ -442,12 +448,17 @@ func NewBaseModel() *BaseModel {
 		timestamps: true,
 		createdAt:  "created_at",
 		updatedAt:  "updated_at",
-		deletedAt:  "deleted_at",
+		deletedAt:  "", // Empty by default - models need to explicitly enable soft deletes
 		attributes: make(map[string]interface{}),
 		original:   make(map[string]interface{}),
 		relations:  make(map[string]interface{}),
 		casts:      make(map[string]string),
 	}
+}
+
+// SetParentModel sets the reference to the parent model that embeds this BaseModel
+func (m *BaseModel) SetParentModel(parent Model) {
+	m.parentModel = parent
 }
 
 // Table configuration methods
@@ -498,6 +509,11 @@ func (m *BaseModel) Dates(dates ...string) *BaseModel {
 
 func (m *BaseModel) WithoutTimestamps() *BaseModel {
 	m.timestamps = false
+	return m
+}
+
+func (m *BaseModel) WithSoftDeletes() *BaseModel {
+	m.deletedAt = "deleted_at"
 	return m
 }
 
@@ -630,10 +646,26 @@ func (m *BaseModel) Fill(attributes map[string]interface{}) Model {
 
 // Save method
 func (m *BaseModel) Save() error {
+	// Only sync struct fields to attributes for existing models (updates)
+	// For new models, we want to preserve the attributes set by Fill()
 	if m.exists {
-		return m.performUpdate()
+		m.syncFieldsToAttributes()
 	}
-	return m.performInsert()
+
+	var err error
+	if m.exists {
+		err = m.performUpdate()
+	} else {
+		err = m.performInsert()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// Sync attributes back to struct fields after successful save
+	m.syncAttributesToFields()
+	return nil
 }
 
 // Delete methods
@@ -658,7 +690,14 @@ func (m *BaseModel) Restore() error {
 // Update method
 func (m *BaseModel) Update(attributes map[string]interface{}) error {
 	m.Fill(attributes)
-	return m.performUpdate()
+	err := m.performUpdate()
+	if err != nil {
+		return err
+	}
+
+	// Sync attributes back to struct fields after successful update
+	m.syncAttributesToFields()
+	return nil
 }
 
 func (m *BaseModel) Fresh() (Model, error) {
@@ -834,6 +873,10 @@ func (m *BaseModel) performUpdate() error {
 		return fmt.Errorf("database connection not initialized")
 	}
 
+	// Always sync the primary key field to attributes to handle direct struct field changes
+	// This ensures that direct struct field changes (like user.ID = "new-id") are reflected in attributes
+	m.syncPrimaryKeyToAttributes()
+
 	if m.timestamps {
 		m.SetAttribute(m.updatedAt, time.Now())
 	}
@@ -867,9 +910,19 @@ func (m *BaseModel) performUpdate() error {
 		}
 	}
 
-	_, err := db.Exec(query, values...)
+	result, err := db.Exec(query, values...)
 	if err != nil {
 		return fmt.Errorf("failed to update record: %w", err)
+	}
+
+	// Check if any rows were affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no rows were updated, record may not exist")
 	}
 
 	m.syncOriginal()
@@ -881,6 +934,10 @@ func (m *BaseModel) performDelete() error {
 	if db == nil {
 		return fmt.Errorf("database connection not initialized")
 	}
+
+	// Always sync the primary key field to attributes to handle direct struct field changes
+	// This ensures that direct struct field changes (like user.ID = "new-id") are reflected in attributes
+	m.syncPrimaryKeyToAttributes()
 
 	primaryKeyValue := m.GetAttribute(m.primaryKey)
 	if primaryKeyValue == nil {
@@ -894,9 +951,19 @@ func (m *BaseModel) performDelete() error {
 		query = strings.Replace(query, "?", "$1", 1)
 	}
 
-	_, err := db.Exec(query, primaryKeyValue)
+	result, err := db.Exec(query, primaryKeyValue)
 	if err != nil {
 		return fmt.Errorf("failed to delete record: %w", err)
+	}
+
+	// Check if any rows were affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no rows were deleted, record may not exist")
 	}
 
 	return nil
@@ -918,6 +985,96 @@ func (m *BaseModel) syncOriginal() {
 	m.original = make(map[string]interface{})
 	for k, v := range m.attributes {
 		m.original[k] = v
+	}
+}
+
+// syncAttributesToFields syncs attributes from the BaseModel to the struct fields
+func (m *BaseModel) syncAttributesToFields() {
+	if m.parentModel != nil {
+		mqb := &ModelQueryBuilder{
+			QueryBuilder: NewQueryBuilder(DB()),
+			model:        m.parentModel,
+		}
+		mqb.autoSyncAttributes(m.parentModel, m.attributes)
+	}
+}
+
+// syncFieldsToAttributes syncs struct fields to the attributes map
+func (m *BaseModel) syncFieldsToAttributes() {
+	if m.parentModel == nil {
+		return
+	}
+
+	modelValue := reflect.ValueOf(m.parentModel)
+	if modelValue.Kind() == reflect.Ptr {
+		modelValue = modelValue.Elem()
+	}
+
+	modelType := modelValue.Type()
+
+	// Iterate through all struct fields
+	for i := 0; i < modelValue.NumField(); i++ {
+		field := modelValue.Field(i)
+		fieldType := modelType.Field(i)
+
+		// Skip unexported fields and BaseModel
+		if !field.CanInterface() || fieldType.Type == reflect.TypeOf((*BaseModel)(nil)) {
+			continue
+		}
+
+		// Get the database column name from the db tag, or use field name
+		dbTag := fieldType.Tag.Get("db")
+		if dbTag == "" {
+			dbTag = toSnakeCase(fieldType.Name)
+		}
+
+		// Get the field value and store in attributes
+		value := field.Interface()
+
+		// Only update if the value is not zero (to avoid overwriting database values with empty struct fields)
+		if !reflect.ValueOf(value).IsZero() || m.GetAttribute(dbTag) != nil {
+			m.SetAttribute(dbTag, value)
+		}
+	}
+}
+
+// syncPrimaryKeyToAttributes syncs only the primary key field to attributes
+func (m *BaseModel) syncPrimaryKeyToAttributes() {
+	if m.parentModel == nil {
+		return
+	}
+
+	modelValue := reflect.ValueOf(m.parentModel)
+	if modelValue.Kind() == reflect.Ptr {
+		modelValue = modelValue.Elem()
+	}
+
+	modelType := modelValue.Type()
+
+	// Iterate through all struct fields to find the primary key
+	for i := 0; i < modelValue.NumField(); i++ {
+		field := modelValue.Field(i)
+		fieldType := modelType.Field(i)
+
+		// Skip unexported fields and BaseModel
+		if !field.CanInterface() || fieldType.Type == reflect.TypeOf((*BaseModel)(nil)) {
+			continue
+		}
+
+		// Get the database column name from the db tag, or use field name
+		dbTag := fieldType.Tag.Get("db")
+		if dbTag == "" {
+			dbTag = toSnakeCase(fieldType.Name)
+		}
+
+		// Only sync the primary key field
+		if dbTag == m.primaryKey {
+			value := field.Interface()
+			if !reflect.ValueOf(value).IsZero() {
+				m.SetAttribute(dbTag, value)
+			}
+			break
+		}
 	}
 }
 
@@ -1069,6 +1226,9 @@ func (ms *ModelStatic[T]) Create(attributes map[string]interface{}) (T, error) {
 	}
 
 	if baseModel != nil {
+		// Set reference to the parent model for attribute syncing
+		baseModel.parentModel = model
+
 		baseModel.Fill(attributes)
 		err := baseModel.Save()
 		if err != nil {

@@ -695,14 +695,23 @@ func (qb *QueryBuilder) ToSQL() (string, []interface{}) {
 		sql.WriteString(strings.Join(orderClauses, ", "))
 	}
 
-	// LIMIT clause
+	// LIMIT and OFFSET clauses
+	// SQLite requires LIMIT when using OFFSET
+	if qb.offsetValue != nil && qb.limitValue == nil {
+		// For SQLite, add a very large limit when only offset is specified
+		if qb.connection != nil && qb.connection.Driver == "sqlite3" {
+			sql.WriteString(" LIMIT ")
+			sql.WriteString(getPlaceholder())
+			args = append(args, 9223372036854775807) // Max int64 value
+		}
+	}
+
 	if qb.limitValue != nil {
 		sql.WriteString(" LIMIT ")
 		sql.WriteString(getPlaceholder())
 		args = append(args, *qb.limitValue)
 	}
 
-	// OFFSET clause
 	if qb.offsetValue != nil {
 		sql.WriteString(" OFFSET ")
 		sql.WriteString(getPlaceholder())
