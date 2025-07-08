@@ -21,9 +21,77 @@ An Eloquent-inspired ORM for Go that provides the same elegant, expressive synta
 go get github.com/crashana/go-eloquent
 ```
 
+## Database Configuration
+
+Go Eloquent supports automatic database connection from `.env` file (Laravel style) or manual configuration.
+
+### Supported Database Connection Types
+
+| DB_CONNECTION | Description | Default Port |
+|---------------|-------------|--------------|
+| `pgsql` | PostgreSQL | 5432 |
+| `postgres` | PostgreSQL (alias) | 5432 |
+| `postgresql` | PostgreSQL (alias) | 5432 |
+| `mysql` | MySQL | 3306 |
+
+### Environment Variables
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `DB_CONNECTION` | Database type (pgsql, mysql) | No | `pgsql` |
+| `DB_HOST` | Database host | No | `localhost` |
+| `DB_PORT` | Database port | No | `5432` (pgsql) or `3306` (mysql) |
+| `DB_DATABASE` | Database name | Yes | - |
+| `DB_USERNAME` | Database username | Yes | - |
+| `DB_PASSWORD` | Database password | No | - |
+| `DB_CHARSET` | Database charset (MySQL only) | No | `utf8mb4` |
+
 ## Quick Start
 
 ### 1. Setup Database Connection
+
+**Option 1: Using .env file (Recommended - Laravel style)**
+
+Create a `.env` file in your project root:
+
+```env
+# PostgreSQL Configuration
+DB_CONNECTION=pgsql
+DB_HOST=localhost
+DB_PORT=5432
+DB_DATABASE=your_database_name
+DB_USERNAME=postgres
+DB_PASSWORD=your_password
+
+# MySQL Configuration (alternative)
+# DB_CONNECTION=mysql
+# DB_HOST=localhost
+# DB_PORT=3306
+# DB_DATABASE=your_database_name
+# DB_USERNAME=root
+# DB_PASSWORD=your_password
+```
+
+Your Go code becomes super simple:
+
+```go
+package main
+
+import (
+    "github.com/crashana/go-eloquent"
+)
+
+func main() {
+    // Database connection is automatically initialized from .env file
+    // No manual configuration needed!
+    defer eloquent.GetManager().CloseAll()
+    
+    // Your models and queries work immediately
+    // user, err := models.User.Where("email", "john@example.com").First()
+}
+```
+
+**Option 2: Manual Configuration (if you don't want to use .env)**
 
 ```go
 package main
@@ -381,6 +449,27 @@ err := db.Transaction(func(tx *sqlx.Tx) error {
     // More operations...
     
     return nil // Transaction will be committed
+})
+```
+
+### Environment Configuration
+
+```go
+// Load custom .env file
+err := eloquent.LoadEnv("custom.env")
+
+// Get environment variables with defaults
+dbHost := eloquent.Env("DB_HOST", "localhost")
+dbPort := eloquent.EnvInt("DB_PORT", 5432)
+debugMode := eloquent.EnvBool("DEBUG", false)
+
+// Manual connection with environment variables
+err := eloquent.PostgreSQL(eloquent.ConnectionConfig{
+    Host:     eloquent.Env("DB_HOST", "localhost"),
+    Port:     eloquent.EnvInt("DB_PORT", 5432),
+    Database: eloquent.Env("DB_DATABASE"),
+    Username: eloquent.Env("DB_USERNAME"),
+    Password: eloquent.Env("DB_PASSWORD"),
 })
 ```
 

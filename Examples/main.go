@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 
 	"postgres_test/models"
 
@@ -10,17 +9,8 @@ import (
 )
 
 func main() {
-	// Setup PostgreSQL connection
-	err := eloquent.PostgreSQL(eloquent.ConnectionConfig{
-		Host:     "localhost",
-		Port:     5432,
-		Database: "testApp",
-		Username: "postgres",
-		Password: "postgres",
-	})
-	if err != nil {
-		log.Fatal("Failed to connect to PostgreSQL:", err)
-	}
+	// Database connection is automatically initialized from .env file
+	// No need to manually configure database connection!
 	defer eloquent.GetManager().CloseAll()
 
 	fmt.Println("=== PostgreSQL Real Database Test ===")

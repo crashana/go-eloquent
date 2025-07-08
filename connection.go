@@ -304,3 +304,10 @@ func SQLite(database string) error {
 func DB(name ...string) *Connection {
 	return GetManager().GetConnection(name...)
 }
+
+// init automatically initializes database connection from .env file
+func init() {
+	// Try to auto-connect from .env file
+	// This is optional - if it fails, user can still manually connect
+	_ = AutoConnect() // Ignore errors - user can manually connect if needed
+}
