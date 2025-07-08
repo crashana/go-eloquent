@@ -4,10 +4,12 @@ An Eloquent-inspired ORM for Go that provides the same elegant, expressive synta
 
 ## Features
 
-- 🔥 **Eloquent-like API** - Familiar syntax for Eloquent developers
+- 🔥 **Eloquent-like API** - Familiar syntax for Laravel developers
 - 🗄️ **Multiple Database Support** - MySQL, PostgreSQL, SQLite
+- ⚡ **Automatic .env Configuration** - Laravel-style database setup
+- 🎯 **Typed Models** - Direct attribute access without type assertions
 - 🔗 **Relationships** - HasOne, HasMany, BelongsTo, BelongsToMany, and more
-- 🔍 **Query Builder** - Fluent, expressive query building
+- 🔍 **Query Builder** - Fluent, expressive query building with method chaining
 - 🎯 **Scopes** - Reusable query constraints
 - 🔄 **Soft Deletes** - Built-in soft delete functionality
 - 📝 **Attribute Casting** - Automatic type conversion
@@ -19,6 +21,39 @@ An Eloquent-inspired ORM for Go that provides the same elegant, expressive synta
 
 ```bash
 go get github.com/crashana/go-eloquent
+```
+
+## Why Go Eloquent?
+
+### 🚀 **Laravel-like Experience in Go**
+
+Go Eloquent brings the beloved Laravel Eloquent ORM experience to Go, with some Go-specific improvements:
+
+| Feature | Traditional Go ORMs | Go Eloquent |
+|---------|-------------------|-------------|
+| **Database Config** | Manual setup required | Automatic `.env` configuration |
+| **Model Access** | Type assertions everywhere | Direct typed attribute access |
+| **Query Building** | Verbose, non-chainable | Fluent, chainable methods |
+| **Relationships** | Manual joins and queries | Eloquent-style relationships |
+| **Attribute Casting** | Manual type conversion | Automatic casting |
+
+### 💡 **Key Advantages**
+
+```go
+// ❌ Traditional Go ORM
+type User struct {
+    ID   int    `db:"id"`
+    Name string `db:"name"`
+}
+
+db.Select(&users, "SELECT * FROM users WHERE active = $1", true)
+if user, ok := result.(*User); ok {
+    fmt.Println(user.Name) // Type assertion needed
+}
+
+// ✅ Go Eloquent
+user, err := models.User.Where("active", true).First()
+fmt.Println(user.Name) // Direct access - no type assertions!
 ```
 
 ## Database Configuration
@@ -45,6 +80,51 @@ Go Eloquent supports automatic database connection from `.env` file (Laravel sty
 | `DB_USERNAME` | Database username | Yes | - |
 | `DB_PASSWORD` | Database password | No | - |
 | `DB_CHARSET` | Database charset (MySQL only) | No | `utf8mb4` |
+
+## Laravel vs Go Eloquent
+
+### 🎯 **Side-by-Side Comparison**
+
+| **Laravel (PHP)** | **Go Eloquent** |
+|------------------|-----------------|
+| `User::where('active', true)->first()` | `models.User.Where("active", true).First()` |
+| `$user->name` | `user.Name` |
+| `User::create(['name' => 'John'])` | `models.User.Create(map[string]interface{}{"name": "John"})` |
+| `$user->posts()->where('published', true)->get()` | `user.Posts().Where("published", true).Get()` |
+
+### 📝 **Configuration Comparison**
+
+**Laravel (.env)**
+```env
+DB_CONNECTION=pgsql
+DB_HOST=localhost
+DB_DATABASE=myapp
+DB_USERNAME=postgres
+DB_PASSWORD=secret
+```
+
+**Go Eloquent (.env)**
+```env
+DB_CONNECTION=pgsql
+DB_HOST=localhost
+DB_DATABASE=myapp
+DB_USERNAME=postgres
+DB_PASSWORD=secret
+```
+
+**Laravel (PHP Code)**
+```php
+// No configuration needed - automatic from .env
+$user = User::where('email', 'john@example.com')->first();
+echo $user->name; // Direct access
+```
+
+**Go Eloquent (Go Code)**
+```go
+// No configuration needed - automatic from .env
+user, err := models.User.Where("email", "john@example.com").First()
+fmt.Println(user.Name) // Direct access - no type assertions!
+```
 
 ## Quick Start
 
@@ -87,7 +167,13 @@ func main() {
     defer eloquent.GetManager().CloseAll()
     
     // Your models and queries work immediately
-    // user, err := models.User.Where("email", "john@example.com").First()
+    user, err := models.User.Where("email", "john@example.com").First()
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Direct access to typed model attributes - just like Laravel!
+    fmt.Println("Welcome,", user.Name)
 }
 ```
 
@@ -133,16 +219,35 @@ func main() {
 ### 2. Define Models
 
 ```go
-type User struct {
+package models
+
+import (
+    "time"
+    "github.com/crashana/go-eloquent"
+)
+
+// UserModel - Typed model with direct attribute access
+type UserModel struct {
     *eloquent.BaseModel
+    
+    // Struct fields for direct access - like Laravel Eloquent
+    ID              string    `json:"id" db:"id"`
+    Name            string    `json:"name" db:"name"`
+    Email           string    `json:"email" db:"email"`
+    EmailVerifiedAt time.Time `json:"email_verified_at" db:"email_verified_at"`
+    IsAdmin         bool      `json:"is_admin" db:"is_admin"`
+    CreatedAt       time.Time `json:"created_at" db:"created_at"`
+    UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 }
 
-func NewUser() *User {
-    user := &User{
+// NewUser creates a new UserModel instance
+func NewUser() *UserModel {
+    user := &UserModel{
         BaseModel: eloquent.NewBaseModel(),
     }
     
     user.Table("users").
+        PrimaryKey("id").
         Fillable("name", "email", "password").
         Hidden("password", "remember_token").
         Casts(map[string]string{
@@ -154,30 +259,78 @@ func NewUser() *User {
 }
 
 // Define relationships
-func (u *User) Posts() *eloquent.Relationship {
+func (u *UserModel) Posts() *eloquent.Relationship {
     rb := eloquent.NewRelationshipBuilder(u)
-    return rb.HasMany("posts", "Post")
+    return rb.HasMany("posts", "PostModel")
 }
 
-func (u *User) Profile() *eloquent.Relationship {
+func (u *UserModel) Profile() *eloquent.Relationship {
     rb := eloquent.NewRelationshipBuilder(u)
-    return rb.HasOne("profile", "Profile")
+    return rb.HasOne("profile", "ProfileModel")
 }
+
+// Global static instance for User model - Laravel style
+var User = eloquent.NewModelStatic(func() *UserModel {
+    return NewUser()
+})
 ```
 
 ### 3. Basic Usage
 
+**Laravel-style Model Usage (No Type Assertions Needed!)**
+
 ```go
-// Create a new user
-user := NewUser()
-user.Fill(map[string]interface{}{
-    "name":     "John Doe",
-    "email":    "john@example.com",
+// Find user by email - Direct attribute access!
+user, err := models.User.Where("email", "john@example.com").First()
+if err != nil {
+    log.Fatal(err)
+}
+
+// Direct access to typed model attributes - just like Laravel!
+fmt.Println("User ID:", user.ID)
+fmt.Println("User Name:", user.Name)
+fmt.Println("User Email:", user.Email)
+fmt.Println("Is Admin:", user.IsAdmin)
+fmt.Println("Created At:", user.CreatedAt)
+
+// Get all users with method chaining
+users, err := models.User.Where("is_admin", false).
+    Where("email_verified_at", "!=", nil).
+    OrderBy("created_at", "desc").
+    Limit(10).
+    Get()
+
+// Loop through typed models - no type assertions!
+for _, user := range users {
+    fmt.Printf("User: %s (%s)\n", user.Name, user.Email)
+}
+
+// Create new user
+newUser, err := models.User.Create(map[string]interface{}{
+    "name":     "Jane Doe",
+    "email":    "jane@example.com",
     "password": "secret123",
 })
+
+// Update user - direct attribute access
+user.Name = "John Smith"
+user.Email = "john.smith@example.com"
 user.Save()
 
-// Query users
+// Or update with map
+user.Update(map[string]interface{}{
+    "name": "John Smith Updated",
+})
+
+// Delete user
+user.Delete() // Soft delete if configured
+user.ForceDelete() // Permanent delete
+```
+
+**Traditional Query Builder (Still Available)**
+
+```go
+// Query users using traditional query builder
 db := eloquent.DB()
 qb := eloquent.NewQueryBuilder(db)
 
@@ -189,15 +342,6 @@ users, err := qb.Table("users").
 
 // Find specific user
 user, err := qb.Table("users").Find(1)
-
-// Update user
-user.Update(map[string]interface{}{
-    "name": "Jane Doe",
-})
-
-// Delete user
-user.Delete() // Soft delete if configured
-user.ForceDelete() // Permanent delete
 ```
 
 ## Query Builder
@@ -507,14 +651,20 @@ err := eloquent.GetManager().AddConnection("custom", config)
 
 ## Examples
 
-Check the [`example/`](example/) directory for complete working examples:
+Check the [`Examples/`](Examples/) directory for complete working examples:
 
-- [`example/main.go`](example/main.go) - Comprehensive usage examples
-- Basic CRUD operations
+- [`Examples/main.go`](Examples/main.go) - Comprehensive usage examples with PostgreSQL
+- [`Examples/models/`](Examples/models/) - Model definitions (Company, Customer, Brand)
+- [`Examples/.env.example`](Examples/.env.example) - Environment configuration examples
+- [`Examples/README.md`](Examples/README.md) - Detailed setup and usage instructions
+
+**Features Demonstrated:**
+- Automatic .env database configuration
+- Typed models with direct attribute access
+- Laravel-style static methods (`Where`, `First`, `All`, `Create`)
+- Method chaining with typed returns
 - Relationship definitions and usage
-- Query builder examples
-- Scopes and filters
-- Model features demonstration
+- No type assertions required!
 
 ## API Reference
 
@@ -526,15 +676,30 @@ Check the [`example/`](example/) directory for complete working examples:
 - `Connection` - Database connection wrapper
 - `Relationship` - Relationship definition
 
-### Connection Management
+### Environment & Connection Management
 
+- `LoadEnv(filepath)` - Load environment variables from .env file
+- `Env(key, default)` - Get environment variable as string
+- `EnvInt(key, default)` - Get environment variable as integer
+- `EnvBool(key, default)` - Get environment variable as boolean
+- `AutoConnect()` - Automatically connect using .env configuration
+- `Init()` - Initialize database connection (alias for AutoConnect)
 - `SQLite(database)` - Create SQLite connection
 - `MySQL(config)` - Create MySQL connection  
 - `PostgreSQL(config)` - Create PostgreSQL connection
 - `DB(name...)` - Get database connection
 - `GetManager()` - Get connection manager
 
-### Model Methods
+### Model Static Methods (Laravel-style)
+
+- `models.User.Where(column, value)` - Query with where clause
+- `models.User.First()` - Get first record
+- `models.User.All()` - Get all records
+- `models.User.Get()` - Get records (alias for All)
+- `models.User.Find(id)` - Find by primary key
+- `models.User.Create(attributes)` - Create new record
+
+### Model Instance Methods
 
 - `Save()` - Save model to database
 - `Delete()` - Delete model (soft delete if configured)
@@ -542,6 +707,8 @@ Check the [`example/`](example/) directory for complete working examples:
 - `Fill(attributes)` - Mass assign attributes
 - `ToMap()` - Convert to map
 - `GetAttribute(key)` / `SetAttribute(key, value)` - Attribute access
+- `Fresh()` - Reload model from database
+- `Refresh()` - Refresh current model instance
 
 ### Query Builder Methods
 
@@ -574,13 +741,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Roadmap
 
+### ✅ **Completed Features**
+- [x] Laravel-style .env configuration
+- [x] Typed models with direct attribute access
+- [x] Automatic database connection initialization
+- [x] Method chaining with typed returns
+- [x] PostgreSQL and MySQL support
+- [x] Basic relationships (HasOne, HasMany, BelongsTo)
+- [x] Query builder with fluent interface
+- [x] Model static methods (Where, First, All, Create)
+- [x] Automatic attribute syncing from database
+
+### 🚧 **In Progress**
+- [ ] Advanced relationship features (BelongsToMany, HasManyThrough)
+- [ ] Eager loading optimization
+- [ ] Query result caching
+
+### 📋 **Planned Features**
 - [ ] Schema builder/migrations
 - [ ] Model events and observers
-- [ ] Advanced relationship features
-- [ ] Query caching
 - [ ] Database seeding
-- [ ] Command-line tools
+- [ ] Command-line tools (artisan-like)
 - [ ] Performance optimizations
+- [ ] SQLite support improvement
+- [ ] Advanced query scopes
+- [ ] Model factories for testing
 
 ---
 
