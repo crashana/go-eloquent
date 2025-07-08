@@ -822,7 +822,7 @@ func generateID() string {
 	return string(b)
 }
 
-// Static-like methods that work like Laravel
+// Static-like methods that work like Eloquent
 // These create a new instance and return the query builder
 
 // Where creates a new query with where clause (static-like)
@@ -859,7 +859,7 @@ func Create(model Model, attributes map[string]interface{}) (Model, error) {
 	return nil, fmt.Errorf("model does not support Create")
 }
 
-// ModelStatic provides Laravel-style static methods for any model
+// ModelStatic provides Eloquent-style static methods for any model
 type ModelStatic[T Model] struct {
 	modelFactory func() T
 }

@@ -1,10 +1,10 @@
 # Go Eloquent ORM
 
-A Laravel Eloquent-inspired ORM for Go that provides the same elegant, expressive syntax for database operations.
+An Eloquent-inspired ORM for Go that provides the same elegant, expressive syntax for database operations.
 
 ## Features
 
-- 🔥 **Laravel Eloquent-like API** - Familiar syntax for Laravel developers
+- 🔥 **Eloquent-like API** - Familiar syntax for Eloquent developers
 - 🗄️ **Multiple Database Support** - MySQL, PostgreSQL, SQLite
 - 🔗 **Relationships** - HasOne, HasMany, BelongsTo, BelongsToMany, and more
 - 🔍 **Query Builder** - Fluent, expressive query building
@@ -197,7 +197,7 @@ avg, err := qb.Table("products").Avg("price")
 
 ## Relationships
 
-Define and use relationships just like Laravel Eloquent:
+Define and use relationships just like Eloquent:
 
 ```go
 // One-to-One
@@ -480,7 +480,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Inspired by [Laravel Eloquent ORM](https://laravel.com/docs/eloquent)
+- Inspired by Eloquent ORM
 - Built with [sqlx](https://github.com/jmoiron/sqlx) for database operations
 
 ## Roadmap
@@ -495,4 +495,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Go Eloquent** - Bringing Laravel's elegant database operations to Go! 🚀 
+**Go Eloquent** - Bringing elegant database operations to Go! 🚀 

@@ -6,11 +6,11 @@ import (
 	"github.com/crashana/go-eloquent"
 )
 
-// CustomerModel - Laravel style model
+// CustomerModel - Eloquent style model
 type CustomerModel struct {
 	*eloquent.BaseModel
 
-	// Struct fields for direct access - like Laravel
+	// Struct fields for direct access - like Eloquent
 	ID                   string    `json:"id" db:"id"`
 	Status               string    `json:"status" db:"status"`
 	Email                string    `json:"email" db:"email"`
@@ -55,7 +55,7 @@ func NewCustomer() *CustomerModel {
 	return customer
 }
 
-// Global static instance for Customer model - Laravel style
+// Global static instance for Customer model - Eloquent style
 var Customer = eloquent.NewModelStatic(func() *CustomerModel {
 	return NewCustomer()
 })

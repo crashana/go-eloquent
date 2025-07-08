@@ -6,7 +6,7 @@ import (
 	"github.com/crashana/go-eloquent"
 )
 
-// BrandModel - Laravel style model (example)
+// BrandModel - Eloquent style model (example)
 type BrandModel struct {
 	*eloquent.BaseModel
 
@@ -38,7 +38,7 @@ func NewBrand() *BrandModel {
 	return brand
 }
 
-// Global static instance for Brand model - Laravel style
+// Global static instance for Brand model - Eloquent style
 var Brand = eloquent.NewModelStatic(func() *BrandModel {
 	return NewBrand()
 })
