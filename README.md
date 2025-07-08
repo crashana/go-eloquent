@@ -18,7 +18,7 @@ A Laravel Eloquent-inspired ORM for Go that provides the same elegant, expressiv
 ## Installation
 
 ```bash
-go get github.com/go-eloquent/eloquent
+go get github.com/crashana/go-eloquent
 ```
 
 ## Quick Start
@@ -29,7 +29,7 @@ go get github.com/go-eloquent/eloquent
 package main
 
 import (
-    "github.com/go-eloquent/eloquent"
+    "github.com/crashana/go-eloquent"
 )
 
 func main() {

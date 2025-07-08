@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/go-eloquent/eloquent"
+	"github.com/crashana/go-eloquent"
 )
 
 // User model example

@@ -1,4 +1,4 @@
-module github.com/go-eloquent/eloquent
+module github.com/crashana/go-eloquent
 
 go 1.21
 
