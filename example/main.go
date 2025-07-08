@@ -12,6 +12,28 @@ type User struct {
 	*eloquent.BaseModel
 }
 
+// Static methods for User model
+func UserQuery() *eloquent.ModelQueryBuilder {
+	user := NewUser()
+	return user.Query()
+}
+
+func UserWhere(column string, args ...interface{}) *eloquent.ModelQueryBuilder {
+	return UserQuery().Where(column, args...)
+}
+
+func UserAll() ([]eloquent.Model, error) {
+	return UserQuery().Get()
+}
+
+func UserFirst() (eloquent.Model, error) {
+	return UserQuery().First()
+}
+
+func UserFind(id interface{}) (eloquent.Model, error) {
+	return UserQuery().Find(id)
+}
+
 // NewUser creates a new User instance
 func NewUser() *User {
 	user := &User{
@@ -259,4 +281,51 @@ func main() {
 	fmt.Println("\n=== Example completed successfully! ===")
 	fmt.Println("\nThis example demonstrates the Laravel Eloquent-like API in Go.")
 	fmt.Println("To use with a real database, configure your connection and run migrations.")
+
+	// Example 11: Laravel-style Model Querying
+	fmt.Println("\n11. Laravel-style Model Querying:")
+
+	// Note: These examples show the syntax, but would need a real database connection to execute
+	fmt.Println("\nExample syntax for Laravel-style querying:")
+
+	// Show how to use the new Laravel-style methods
+	fmt.Println(`
+	// Find user by email
+	user, err := UserWhere("email", "testUser@gmail.com").First()
+	
+	// Find user by ID
+	user, err := UserFind(1)
+	
+	// Get all active users
+	users, err := UserWhere("active", true).Get()
+	
+	// Complex query
+	users, err := UserWhere("age", ">", 18).
+		Where("status", "active").
+		OrderBy("created_at", "desc").
+		Limit(10).
+		Get()
+	
+	// Using instance methods
+	userInstance := NewUser()
+	user, err := userInstance.Where("email", "test@example.com").First()
+	`)
+
+	// Demonstrate the query building (without execution)
+	fmt.Println("Query building examples:")
+
+	// Show SQL generation for Laravel-style queries
+	userQuery := UserWhere("email", "testUser@gmail.com")
+	sql, args := userQuery.QueryBuilder.ToSQL()
+	fmt.Printf("Laravel-style query SQL: %s\n", sql)
+	fmt.Printf("Args: %v\n", args)
+
+	// Complex query example
+	complexQuery := UserWhere("age", ">", 18).
+		Where("status", "active").
+		OrderBy("created_at", "desc").
+		Limit(10)
+	sql2, args2 := complexQuery.QueryBuilder.ToSQL()
+	fmt.Printf("Complex query SQL: %s\n", sql2)
+	fmt.Printf("Args: %v\n", args2)
 }

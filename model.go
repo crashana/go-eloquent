@@ -75,6 +75,223 @@ type BaseModel struct {
 	relations map[string]interface{}
 }
 
+// ModelQueryBuilder wraps QueryBuilder and returns model instances
+type ModelQueryBuilder struct {
+	*QueryBuilder
+	model Model
+}
+
+// NewModelQueryBuilder creates a new model query builder
+func NewModelQueryBuilder(model Model) *ModelQueryBuilder {
+	db := DB()
+	if db == nil {
+		panic("Database connection not initialized")
+	}
+
+	qb := NewQueryBuilder(db)
+	qb.Table(model.GetTable())
+
+	return &ModelQueryBuilder{
+		QueryBuilder: qb,
+		model:        model,
+	}
+}
+
+// Get returns multiple model instances
+func (mqb *ModelQueryBuilder) Get() ([]Model, error) {
+	results, err := mqb.QueryBuilder.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	var models []Model
+	for _, result := range results {
+		model := mqb.newModelInstance()
+		mqb.fillModelFromMap(model, result)
+		models = append(models, model)
+	}
+
+	return models, nil
+}
+
+// First returns the first model instance
+func (mqb *ModelQueryBuilder) First() (Model, error) {
+	result, err := mqb.QueryBuilder.First()
+	if err != nil {
+		return nil, err
+	}
+
+	model := mqb.newModelInstance()
+	mqb.fillModelFromMap(model, result)
+	return model, nil
+}
+
+// FirstOrFail returns the first model instance or fails
+func (mqb *ModelQueryBuilder) FirstOrFail() (Model, error) {
+	result, err := mqb.QueryBuilder.FirstOrFail()
+	if err != nil {
+		return nil, err
+	}
+
+	model := mqb.newModelInstance()
+	mqb.fillModelFromMap(model, result)
+	return model, nil
+}
+
+// Find finds a model by primary key
+func (mqb *ModelQueryBuilder) Find(id interface{}) (Model, error) {
+	result, err := mqb.QueryBuilder.Find(id)
+	if err != nil {
+		return nil, err
+	}
+
+	model := mqb.newModelInstance()
+	mqb.fillModelFromMap(model, result)
+	return model, nil
+}
+
+// FindOrFail finds a model by primary key or fails
+func (mqb *ModelQueryBuilder) FindOrFail(id interface{}) (Model, error) {
+	result, err := mqb.QueryBuilder.FindOrFail(id)
+	if err != nil {
+		return nil, err
+	}
+
+	model := mqb.newModelInstance()
+	mqb.fillModelFromMap(model, result)
+	return model, nil
+}
+
+// Where adds a where clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) Where(column string, args ...interface{}) *ModelQueryBuilder {
+	mqb.QueryBuilder.Where(column, args...)
+	return mqb
+}
+
+// OrWhere adds an OR where clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) OrWhere(column string, args ...interface{}) *ModelQueryBuilder {
+	mqb.QueryBuilder.OrWhere(column, args...)
+	return mqb
+}
+
+// WhereIn adds a where in clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) WhereIn(column string, values []interface{}) *ModelQueryBuilder {
+	mqb.QueryBuilder.WhereIn(column, values)
+	return mqb
+}
+
+// WhereNotIn adds a where not in clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) WhereNotIn(column string, values []interface{}) *ModelQueryBuilder {
+	mqb.QueryBuilder.WhereNotIn(column, values)
+	return mqb
+}
+
+// WhereNull adds a where null clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) WhereNull(column string) *ModelQueryBuilder {
+	mqb.QueryBuilder.WhereNull(column)
+	return mqb
+}
+
+// WhereNotNull adds a where not null clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) WhereNotNull(column string) *ModelQueryBuilder {
+	mqb.QueryBuilder.WhereNotNull(column)
+	return mqb
+}
+
+// OrderBy adds an order by clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) OrderBy(column, direction string) *ModelQueryBuilder {
+	mqb.QueryBuilder.OrderBy(column, direction)
+	return mqb
+}
+
+// OrderByDesc adds an order by desc clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) OrderByDesc(column string) *ModelQueryBuilder {
+	mqb.QueryBuilder.OrderByDesc(column)
+	return mqb
+}
+
+// Limit adds a limit clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) Limit(limit int) *ModelQueryBuilder {
+	mqb.QueryBuilder.Limit(limit)
+	return mqb
+}
+
+// Take adds a limit clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) Take(limit int) *ModelQueryBuilder {
+	mqb.QueryBuilder.Take(limit)
+	return mqb
+}
+
+// Offset adds an offset clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) Offset(offset int) *ModelQueryBuilder {
+	mqb.QueryBuilder.Offset(offset)
+	return mqb
+}
+
+// Skip adds an offset clause and returns ModelQueryBuilder
+func (mqb *ModelQueryBuilder) Skip(offset int) *ModelQueryBuilder {
+	mqb.QueryBuilder.Skip(offset)
+	return mqb
+}
+
+// newModelInstance creates a new instance of the model
+func (mqb *ModelQueryBuilder) newModelInstance() Model {
+	modelType := reflect.TypeOf(mqb.model).Elem()
+	newModel := reflect.New(modelType).Interface().(Model)
+	return newModel
+}
+
+// fillModelFromMap fills a model with data from a map
+func (mqb *ModelQueryBuilder) fillModelFromMap(model Model, data map[string]interface{}) {
+	if baseModel, ok := model.(*BaseModel); ok {
+		baseModel.attributes = make(map[string]interface{})
+		baseModel.original = make(map[string]interface{})
+
+		for key, value := range data {
+			baseModel.attributes[key] = value
+			baseModel.original[key] = value
+		}
+
+		baseModel.exists = true
+		baseModel.wasRecentlyCreated = false
+	}
+}
+
+// Static query methods for BaseModel
+func (m *BaseModel) Query() *ModelQueryBuilder {
+	return NewModelQueryBuilder(m)
+}
+
+// Where creates a new query with a where clause
+func (m *BaseModel) Where(column string, args ...interface{}) *ModelQueryBuilder {
+	return m.Query().Where(column, args...)
+}
+
+// OrWhere creates a new query with an OR where clause
+func (m *BaseModel) OrWhere(column string, args ...interface{}) *ModelQueryBuilder {
+	return m.Query().OrWhere(column, args...)
+}
+
+// WhereIn creates a new query with a where in clause
+func (m *BaseModel) WhereIn(column string, values []interface{}) *ModelQueryBuilder {
+	return m.Query().WhereIn(column, values)
+}
+
+// All returns all records
+func (m *BaseModel) All() ([]Model, error) {
+	return m.Query().Get()
+}
+
+// First returns the first record
+func (m *BaseModel) First() (Model, error) {
+	return m.Query().First()
+}
+
+// Find finds a record by primary key
+func (m *BaseModel) Find(id interface{}) (Model, error) {
+	return m.Query().Find(id)
+}
+
 // NewBaseModel creates a new base model instance
 func NewBaseModel() *BaseModel {
 	return &BaseModel{
