@@ -297,6 +297,22 @@ func (mqb *ModelQueryBuilder) fillModelFromMap(model Model, data map[string]inte
 
 		baseModel.exists = true
 		baseModel.wasRecentlyCreated = false
+
+		// Copy table configuration from the template model
+		if mqb.model != nil {
+			baseModel.table = mqb.model.GetTable()
+			baseModel.primaryKey = mqb.model.GetPrimaryKey()
+			baseModel.fillable = mqb.model.GetFillable()
+			baseModel.guarded = mqb.model.GetGuarded()
+			baseModel.hidden = mqb.model.GetHidden()
+			baseModel.visible = mqb.model.GetVisible()
+			baseModel.casts = mqb.model.GetCasts()
+			baseModel.dates = mqb.model.GetDates()
+			baseModel.timestamps = mqb.model.GetTimestamps()
+			baseModel.createdAt = mqb.model.GetCreatedAtColumn()
+			baseModel.updatedAt = mqb.model.GetUpdatedAtColumn()
+			baseModel.deletedAt = mqb.model.GetDeletedAtColumn()
+		}
 	}
 
 	// Auto-sync attributes to struct fields
@@ -491,7 +507,10 @@ func (m *BaseModel) GetTable() string {
 		return m.table
 	}
 	// Auto-generate table name from struct name
-	modelType := reflect.TypeOf(m).Elem()
+	modelType := reflect.TypeOf(m)
+	if modelType.Kind() == reflect.Ptr {
+		modelType = modelType.Elem()
+	}
 	return toSnakeCase(modelType.Name()) + "s"
 }
 
@@ -639,7 +658,7 @@ func (m *BaseModel) Restore() error {
 // Update method
 func (m *BaseModel) Update(attributes map[string]interface{}) error {
 	m.Fill(attributes)
-	return m.Save()
+	return m.performUpdate()
 }
 
 func (m *BaseModel) Fresh() (Model, error) {
@@ -745,9 +764,10 @@ func (m *BaseModel) castAttribute(_ string, val interface{}, castType string) in
 
 // Database operation methods (to be implemented with actual DB connection)
 func (m *BaseModel) performInsert() error {
-	// Implementation would insert into database
-	m.exists = true
-	m.wasRecentlyCreated = true
+	db := DB()
+	if db == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
 
 	if m.timestamps {
 		now := time.Now()
@@ -757,17 +777,99 @@ func (m *BaseModel) performInsert() error {
 
 	// Generate ID for primary key if needed
 	if m.GetAttribute(m.primaryKey) == nil {
-		m.SetAttribute(m.primaryKey, generateID())
+		// For PostgreSQL, let the database generate the UUID
+		db := DB()
+		if db != nil && db.Driver == "postgres" {
+			// Use PostgreSQL's gen_random_uuid() function
+			var id string
+			err := db.DB.QueryRow("SELECT gen_random_uuid()").Scan(&id)
+			if err != nil {
+				// Fallback to manual UUID generation
+				m.SetAttribute(m.primaryKey, generateID())
+			} else {
+				m.SetAttribute(m.primaryKey, id)
+			}
+		} else {
+			m.SetAttribute(m.primaryKey, generateID())
+		}
 	}
 
+	// Build INSERT query
+	var columns []string
+	var values []interface{}
+	var placeholders []string
+
+	for key, value := range m.attributes {
+		columns = append(columns, key)
+		values = append(values, value)
+		placeholders = append(placeholders, "?")
+	}
+
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+		m.GetTable(),
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "))
+
+	// Convert ? to $1, $2, etc. for PostgreSQL
+	if db.Driver == "postgres" {
+		for i := 0; i < len(placeholders); i++ {
+			query = strings.Replace(query, "?", fmt.Sprintf("$%d", i+1), 1)
+		}
+	}
+
+	_, err := db.Exec(query, values...)
+	if err != nil {
+		return fmt.Errorf("failed to insert record: %w", err)
+	}
+
+	m.exists = true
+	m.wasRecentlyCreated = true
 	m.syncOriginal()
 	return nil
 }
 
 func (m *BaseModel) performUpdate() error {
-	// Implementation would update database
+	db := DB()
+	if db == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
+
 	if m.timestamps {
 		m.SetAttribute(m.updatedAt, time.Now())
+	}
+
+	// Build UPDATE query
+	var setParts []string
+	var values []interface{}
+
+	for key, value := range m.attributes {
+		if key != m.primaryKey { // Don't update primary key
+			setParts = append(setParts, fmt.Sprintf("%s = ?", key))
+			values = append(values, value)
+		}
+	}
+
+	// Add primary key value for WHERE clause
+	primaryKeyValue := m.GetAttribute(m.primaryKey)
+	values = append(values, primaryKeyValue)
+
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = ?",
+		m.GetTable(),
+		strings.Join(setParts, ", "),
+		m.primaryKey)
+
+	// Convert ? to $1, $2, etc. for PostgreSQL
+	if db.Driver == "postgres" {
+		placeholderIndex := 1
+		for strings.Contains(query, "?") {
+			query = strings.Replace(query, "?", fmt.Sprintf("$%d", placeholderIndex), 1)
+			placeholderIndex++
+		}
+	}
+
+	_, err := db.Exec(query, values...)
+	if err != nil {
+		return fmt.Errorf("failed to update record: %w", err)
 	}
 
 	m.syncOriginal()
@@ -775,7 +877,28 @@ func (m *BaseModel) performUpdate() error {
 }
 
 func (m *BaseModel) performDelete() error {
-	// Implementation would delete from database
+	db := DB()
+	if db == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
+
+	primaryKeyValue := m.GetAttribute(m.primaryKey)
+	if primaryKeyValue == nil {
+		return fmt.Errorf("cannot delete record without primary key")
+	}
+
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s = ?", m.GetTable(), m.primaryKey)
+
+	// Convert ? to $1 for PostgreSQL
+	if db.Driver == "postgres" {
+		query = strings.Replace(query, "?", "$1", 1)
+	}
+
+	_, err := db.Exec(query, primaryKeyValue)
+	if err != nil {
+		return fmt.Errorf("failed to delete record: %w", err)
+	}
+
 	return nil
 }
 
@@ -812,14 +935,20 @@ func toSnakeCase(str string) string {
 	return result.String()
 }
 
-// generateID generates a simple random ID
+// generateID generates a UUID-like ID for PostgreSQL compatibility
 func generateID() string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	// Generate a UUID-like string
 	b := make([]byte, 16)
-	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
-	}
-	return string(b)
+	rand.Read(b)
+
+	// Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+	return fmt.Sprintf("%x-%x-4%x-%x%x-%x",
+		b[0:4],
+		b[4:6],
+		b[6:8],
+		b[8:9],
+		b[9:10],
+		b[10:16])
 }
 
 // Static-like methods that work like Eloquent
@@ -922,15 +1051,41 @@ func (ms *ModelStatic[T]) Find(id interface{}) (T, error) {
 // Create creates a new record (static-like) - returns the typed model directly
 func (ms *ModelStatic[T]) Create(attributes map[string]interface{}) (T, error) {
 	model := ms.modelFactory()
-	if baseModel, ok := any(model).(*BaseModel); ok {
+
+	// Use reflection to find the embedded BaseModel
+	modelValue := reflect.ValueOf(model)
+	if modelValue.Kind() == reflect.Ptr {
+		modelValue = modelValue.Elem()
+	}
+
+	// Look for embedded BaseModel field
+	var baseModel *BaseModel
+	for i := 0; i < modelValue.NumField(); i++ {
+		field := modelValue.Field(i)
+		if field.Type() == reflect.TypeOf((*BaseModel)(nil)) {
+			baseModel = field.Interface().(*BaseModel)
+			break
+		}
+	}
+
+	if baseModel != nil {
 		baseModel.Fill(attributes)
 		err := baseModel.Save()
 		if err != nil {
 			var zero T
 			return zero, err
 		}
+
+		// Sync attributes back to struct fields after creation
+		mqb := &ModelQueryBuilder{
+			QueryBuilder: NewQueryBuilder(DB()),
+			model:        model,
+		}
+		mqb.autoSyncAttributes(model, baseModel.attributes)
+
 		return model, nil
 	}
+
 	var zero T
 	return zero, fmt.Errorf("model does not support Create")
 }

@@ -8,12 +8,14 @@ An Eloquent-inspired ORM for Go that provides the same elegant, expressive synta
 - 🗄️ **Multiple Database Support** - MySQL, PostgreSQL, SQLite
 - ⚡ **Automatic .env Configuration** - Laravel-style database setup
 - 🎯 **Typed Models** - Direct attribute access without type assertions
-- 🔗 **Relationships** - HasOne, HasMany, BelongsTo, BelongsToMany, and more
+- ✨ **Complete CRUD Operations** - Create, Read, Update, Delete with multiple methods
 - 🔍 **Query Builder** - Fluent, expressive query building with method chaining
+- 🔗 **Relationships** - HasOne, HasMany, BelongsTo, BelongsToMany, and more
 - 🎯 **Scopes** - Reusable query constraints
 - 🔄 **Soft Deletes** - Built-in soft delete functionality
 - 📝 **Attribute Casting** - Automatic type conversion
 - 🚀 **Mass Assignment** - Fillable and guarded attributes
+- 🔑 **Auto UUID Generation** - Automatic UUID generation for PostgreSQL
 - 📊 **Pagination** - Built-in pagination support
 - 🔐 **Transactions** - Database transaction support
 
@@ -311,20 +313,192 @@ newUser, err := models.User.Create(map[string]interface{}{
     "email":    "jane@example.com",
     "password": "secret123",
 })
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Created user: %s (ID: %s)\n", newUser.Name, newUser.ID)
 
-// Update user - direct attribute access
+// Update user - Method 1: Using Update method with map
+err = user.Update(map[string]interface{}{
+    "name":  "John Smith Updated",
+    "email": "john.smith@example.com",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// Update user - Method 2: Direct attribute access + Save
 user.Name = "John Smith"
 user.Email = "john.smith@example.com"
-user.Save()
+err = user.Save()
+if err != nil {
+    log.Fatal(err)
+}
 
-// Or update with map
-user.Update(map[string]interface{}{
-    "name": "John Smith Updated",
-})
+// Find and update
+foundUser, err := models.User.Find(user.ID)
+if err != nil {
+    log.Fatal(err)
+}
+foundUser.Name = "Updated Name"
+foundUser.Save()
 
 // Delete user
 user.Delete() // Soft delete if configured
 user.ForceDelete() // Permanent delete
+```
+
+## CRUD Operations
+
+Go Eloquent provides comprehensive CRUD (Create, Read, Update, Delete) operations with Laravel-like syntax:
+
+### Create Operations
+
+```go
+// Create single record
+user, err := models.User.Create(map[string]interface{}{
+    "name":     "John Doe",
+    "email":    "john@example.com",
+    "password": "secret123",
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Created user: %s (ID: %s)\n", user.Name, user.ID)
+
+// Create with relationships
+customer, err := models.Customer.Create(map[string]interface{}{
+    "first_name": "Alice",
+    "last_name":  "Johnson",
+    "email":      "alice@example.com",
+    "phone":      "+1234567890",
+    "company_id": company.ID, // Link to existing company
+})
+```
+
+### Read Operations
+
+```go
+// Find by primary key
+user, err := models.User.Find("123e4567-e89b-12d3-a456-426614174000")
+
+// Find first matching record
+user, err := models.User.Where("email", "john@example.com").First()
+
+// Get all records
+users, err := models.User.All()
+
+// Get with conditions
+activeUsers, err := models.User.Where("status", "active").
+    Where("verified", true).
+    OrderBy("created_at", "desc").
+    Get()
+
+// Check if record exists
+exists, err := models.User.Where("email", "john@example.com").Exists()
+```
+
+### Update Operations
+
+Go Eloquent provides multiple ways to update records:
+
+```go
+// Method 1: Update using Update() method with map
+err = user.Update(map[string]interface{}{
+    "name":   "John Smith",
+    "email":  "john.smith@example.com",
+    "status": "premium",
+})
+
+// Method 2: Direct attribute modification + Save()
+user.Name = "John Updated"
+user.Email = "john.updated@example.com"
+err = user.Save()
+
+// Method 3: Find and update
+foundUser, err := models.User.Find(userID)
+if err != nil {
+    log.Fatal(err)
+}
+foundUser.Status = "active"
+err = foundUser.Save()
+
+// Method 4: Update multiple records (coming soon)
+// affected, err := models.User.Where("status", "inactive").Update(map[string]interface{}{
+//     "status": "active",
+// })
+```
+
+### Delete Operations
+
+```go
+// Soft delete (if configured)
+err = user.Delete()
+
+// Permanent delete
+err = user.ForceDelete()
+
+// Delete by ID
+user, err := models.User.Find(userID)
+if err != nil {
+    log.Fatal(err)
+}
+err = user.Delete()
+
+// Restore soft deleted record
+err = user.Restore()
+```
+
+### Complete CRUD Example
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "your-project/models"
+    "github.com/crashana/go-eloquent"
+)
+
+func main() {
+    // Database connection automatically initialized from .env
+    defer eloquent.GetManager().CloseAll()
+
+    // CREATE
+    user, err := models.User.Create(map[string]interface{}{
+        "name":     "John Doe",
+        "email":    "john@example.com",
+        "password": "secret123",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("✅ Created: %s (ID: %s)\n", user.Name, user.ID)
+
+    // READ
+    foundUser, err := models.User.Find(user.ID)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("📖 Found: %s (%s)\n", foundUser.Name, foundUser.Email)
+
+    // UPDATE
+    err = foundUser.Update(map[string]interface{}{
+        "name": "John Smith Updated",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("🔄 Updated: %s\n", foundUser.Name)
+
+    // DELETE
+    err = foundUser.Delete()
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("🗑️  Deleted: %s\n", foundUser.Name)
+}
 ```
 
 **Traditional Query Builder (Still Available)**
@@ -653,7 +827,11 @@ err := eloquent.GetManager().AddConnection("custom", config)
 
 Check the [`Examples/`](Examples/) directory for complete working examples:
 
-- [`Examples/main.go`](Examples/main.go) - Comprehensive usage examples with PostgreSQL
+- [`Examples/main.go`](Examples/main.go) - **Comprehensive CRUD examples** with PostgreSQL
+  - ✅ CREATE operations (companies, customers with relationships)
+  - ✅ READ operations (queries, Find by ID, method chaining)
+  - ✅ UPDATE operations (Update() method, direct attribute access + Save())
+  - ✅ DELETE operations (soft delete, permanent delete)
 - [`Examples/models/`](Examples/models/) - Model definitions (Company, Customer, Brand)
 - [`Examples/.env.example`](Examples/.env.example) - Environment configuration examples
 - [`Examples/README.md`](Examples/README.md) - Detailed setup and usage instructions
@@ -662,7 +840,11 @@ Check the [`Examples/`](Examples/) directory for complete working examples:
 - Automatic .env database configuration
 - Typed models with direct attribute access
 - Laravel-style static methods (`Where`, `First`, `All`, `Create`)
+- **Complete CRUD operations** (Create, Read, Update, Delete)
 - Method chaining with typed returns
+- Multiple update methods (Update() with map, direct attribute access + Save())
+- Find by ID and update operations
+- Automatic UUID generation for PostgreSQL
 - Relationship definitions and usage
 - No type assertions required!
 
@@ -701,9 +883,11 @@ Check the [`Examples/`](Examples/) directory for complete working examples:
 
 ### Model Instance Methods
 
-- `Save()` - Save model to database
+- `Save()` - Save model to database (insert if new, update if exists)
+- `Create(attributes)` - Create new record and return typed model
+- `Update(attributes)` - Update model attributes using map
 - `Delete()` - Delete model (soft delete if configured)
-- `Update(attributes)` - Update model attributes
+- `ForceDelete()` - Permanently delete model (bypass soft delete)
 - `Fill(attributes)` - Mass assign attributes
 - `ToMap()` - Convert to map
 - `GetAttribute(key)` / `SetAttribute(key, value)` - Attribute access
@@ -736,8 +920,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Inspired by Eloquent ORM
+- Inspired by Laravel's Eloquent ORM
 - Built with [sqlx](https://github.com/jmoiron/sqlx) for database operations
+- **Developed by Claude 4 Sonnet AI** - This entire Go Eloquent ORM package was designed and implemented by Anthropic's Claude 4 Sonnet AI
 
 ## Roadmap
 
@@ -747,10 +932,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Automatic database connection initialization
 - [x] Method chaining with typed returns
 - [x] PostgreSQL and MySQL support
+- [x] **Complete CRUD operations** (Create, Read, Update, Delete)
+- [x] Multiple update methods (Update() with map, direct attribute + Save())
+- [x] Automatic UUID generation for PostgreSQL
+- [x] Find by ID operations
 - [x] Basic relationships (HasOne, HasMany, BelongsTo)
 - [x] Query builder with fluent interface
 - [x] Model static methods (Where, First, All, Create)
 - [x] Automatic attribute syncing from database
+- [x] Soft delete support
+- [x] Mass assignment with fillable/guarded attributes
 
 ### 🚧 **In Progress**
 - [ ] Advanced relationship features (BelongsToMany, HasManyThrough)
