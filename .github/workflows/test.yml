@@ -10,17 +10,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
     
-    strategy:
-      matrix:
-        go-version: [1.19, 1.20, 1.21]
-    
     steps:
     - uses: actions/checkout@v4
     
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: 1.21
+    
+    - name: Enable Go modules
+      run: |
+        export GO111MODULE=on
+        echo "GO111MODULE=on" >> $GITHUB_ENV
     
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -28,12 +29,18 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.21-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
+          ${{ runner.os }}-go-1.21-
     
     - name: Download dependencies
-      run: go mod download
+      run: |
+        go version
+        go env GOMOD
+        go env GO111MODULE
+        ls -la
+        cat go.mod
+        go mod download
     
     - name: Verify dependencies
       run: go mod verify
@@ -59,7 +66,6 @@ jobs:
     
     strategy:
       matrix:
-        go-version: [1.20, 1.21]
         database: [sqlite, postgres, mysql]
     
     services:
@@ -95,7 +101,12 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: 1.21
+    
+    - name: Enable Go modules
+      run: |
+        export GO111MODULE=on
+        echo "GO111MODULE=on" >> $GITHUB_ENV
     
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -103,12 +114,15 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.21-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
+          ${{ runner.os }}-go-1.21-
     
     - name: Download dependencies
-      run: go mod download
+      run: |
+        go version
+        go env GOMOD
+        go mod download
     
     - name: Set up test environment
       run: |
@@ -171,6 +185,11 @@ jobs:
       with:
         go-version: 1.21
     
+    - name: Enable Go modules
+      run: |
+        export GO111MODULE=on
+        echo "GO111MODULE=on" >> $GITHUB_ENV
+    
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v4
       with:
@@ -187,6 +206,11 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: 1.21
+    
+    - name: Enable Go modules
+      run: |
+        export GO111MODULE=on
+        echo "GO111MODULE=on" >> $GITHUB_ENV
     
     - name: Run Gosec Security Scanner
       run: |
@@ -218,6 +242,11 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: 1.21
+    
+    - name: Enable Go modules
+      run: |
+        export GO111MODULE=on
+        echo "GO111MODULE=on" >> $GITHUB_ENV
     
     - name: Create bin directory
       run: mkdir -p bin
@@ -268,6 +297,11 @@ jobs:
       with:
         go-version: 1.21
     
+    - name: Enable Go modules
+      run: |
+        export GO111MODULE=on
+        echo "GO111MODULE=on" >> $GITHUB_ENV
+    
     - name: Cache Go modules
       uses: actions/cache@v4
       with:
@@ -279,7 +313,10 @@ jobs:
           ${{ runner.os }}-go-1.21-
     
     - name: Download dependencies
-      run: go mod download
+      run: |
+        go version
+        go env GOMOD
+        go mod download
     
     - name: Run tests with coverage
       run: |
@@ -307,6 +344,11 @@ jobs:
       with:
         go-version: 1.21
     
+    - name: Enable Go modules
+      run: |
+        export GO111MODULE=on
+        echo "GO111MODULE=on" >> $GITHUB_ENV
+    
     - name: Cache Go modules
       uses: actions/cache@v4
       with:
@@ -318,7 +360,10 @@ jobs:
           ${{ runner.os }}-go-1.21-
     
     - name: Download dependencies
-      run: go mod download
+      run: |
+        go version
+        go env GOMOD
+        go mod download
     
     - name: Run benchmarks
       run: |
