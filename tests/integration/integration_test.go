@@ -325,6 +325,11 @@ func TestIntegrationComplexQueries(t *testing.T) {
 		createdUsers = append(createdUsers, user)
 	}
 
+	// Verify users were created
+	if len(createdUsers) != len(users) {
+		t.Errorf("Expected %d created users, got %d", len(users), len(createdUsers))
+	}
+
 	// Test complex queries
 	// 1. Find all active users
 	activeUsers, err := models.User.Where("status", "active").Get()
@@ -479,7 +484,7 @@ func TestIntegrationTransactionSimulation(t *testing.T) {
 	})
 	if err != nil {
 		// If profile creation fails, clean up user
-		user.Delete()
+		_ = user.Delete()
 		t.Fatalf("Failed to create profile: %v", err)
 	}
 

@@ -57,6 +57,15 @@ func LoadEnv(filepath ...string) error {
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
+		// Handle comments in values - remove everything after # that's not in quotes
+		if commentIndex := strings.Index(value, "#"); commentIndex != -1 {
+			// Check if the # is inside quotes
+			if !(strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)) &&
+				!(strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`)) {
+				value = strings.TrimSpace(value[:commentIndex])
+			}
+		}
+
 		// Remove quotes if present
 		if (strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)) ||
 			(strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`)) {

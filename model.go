@@ -1,8 +1,8 @@
 package eloquent
 
 import (
+	cryptoRand "crypto/rand"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strings"
 	"time"
@@ -1096,7 +1096,7 @@ func toSnakeCase(str string) string {
 func generateID() string {
 	// Generate a UUID-like string
 	b := make([]byte, 16)
-	rand.Read(b)
+	cryptoRand.Read(b)
 
 	// Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
 	return fmt.Sprintf("%x-%x-4%x-%x%x-%x",

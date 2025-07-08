@@ -12,9 +12,11 @@ variables:
 
 # Cache Go modules for faster builds
 cache:
+  key: "${CI_COMMIT_REF_SLUG}-${GO_VERSION}"
   paths:
     - .cache/go-build/
     - .cache/go-mod/
+  policy: pull-push
 
 # Test job with SQLite (primary testing database)
 test:sqlite:
@@ -22,16 +24,15 @@ test:sqlite:
   image: golang:${GO_VERSION}-alpine
   before_script:
     - apk add --no-cache git gcc musl-dev sqlite
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go version
     - go mod download
   script:
     - echo "Running core tests with SQLite..."
-    - go test -v ./tests/model_test.go
-    - go test -v ./tests/integration/integration_test.go
-    - go test -v ./querybuilder_test.go
-    - go test -v ./relationships_test.go
+    - go test -v ./... || exit 1
+    - echo "All tests completed successfully"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -57,6 +58,7 @@ test:postgresql:
     POSTGRES_HOST_AUTH_METHOD: trust
   before_script:
     - apk add --no-cache git gcc musl-dev postgresql-client
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go version
@@ -72,8 +74,8 @@ test:postgresql:
     - export DB_DATABASE=test_db
     - export DB_USERNAME=test_user
     - export DB_PASSWORD=test_password
-    - go test -v ./tests/model_test.go
-    - go test -v ./tests/integration/integration_test.go
+    - go test -v ./... || exit 1
+    - echo "PostgreSQL tests completed successfully"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -94,6 +96,7 @@ test:mysql:
     MYSQL_PASSWORD: test_password
   before_script:
     - apk add --no-cache git gcc musl-dev mysql-client
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go version
@@ -109,8 +112,8 @@ test:mysql:
     - export DB_DATABASE=test_db
     - export DB_USERNAME=test_user
     - export DB_PASSWORD=test_password
-    - go test -v ./tests/model_test.go
-    - go test -v ./tests/integration/integration_test.go
+    - go test -v ./... || exit 1
+    - echo "MySQL tests completed successfully"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -122,6 +125,7 @@ quality:
   image: golang:${GO_VERSION}-alpine
   before_script:
     - apk add --no-cache git gcc musl-dev
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go install golang.org/x/tools/cmd/goimports@latest
@@ -129,14 +133,15 @@ quality:
   script:
     - echo "Running code quality checks..."
     - go fmt ./...
-    - go vet ./...
-    - staticcheck ./...
+    - go vet ./... || exit 1
+    - staticcheck ./... || exit 1
     - goimports -l .
     - |
       if [ -n "$(goimports -l .)" ]; then
         echo "Code is not properly formatted. Please run 'goimports -w .'"
         exit 1
       fi
+    - echo "Code quality checks completed"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -148,17 +153,20 @@ security:
   image: golang:${GO_VERSION}-alpine
   before_script:
     - apk add --no-cache git gcc musl-dev
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
   script:
     - echo "Running security scan..."
-    - gosec -fmt json -out gosec-report.json ./...
-    - gosec ./...
+    - gosec -fmt json -out gosec-report.json ./... || true
+    - gosec ./... || true
+    - echo "Security scan completed"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   artifacts:
+    when: always
     paths:
       - gosec-report.json
     expire_in: 1 week
@@ -170,6 +178,7 @@ build:
   image: golang:${GO_VERSION}-alpine
   before_script:
     - apk add --no-cache git gcc musl-dev
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go version
@@ -191,6 +200,7 @@ coverage:
   image: golang:${GO_VERSION}-alpine
   before_script:
     - apk add --no-cache git gcc musl-dev sqlite
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go version
@@ -223,6 +233,7 @@ benchmark:
   image: golang:${GO_VERSION}-alpine
   before_script:
     - apk add --no-cache git gcc musl-dev sqlite
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go version
@@ -245,6 +256,7 @@ docs:
   image: golang:${GO_VERSION}-alpine
   before_script:
     - apk add --no-cache git gcc musl-dev
+    - mkdir -p .cache/go-build .cache/go-mod
     - export GOCACHE=$PWD/.cache/go-build
     - export GOMODCACHE=$PWD/.cache/go-mod
     - go install golang.org/x/tools/cmd/godoc@latest

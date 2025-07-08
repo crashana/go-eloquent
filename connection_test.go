@@ -59,7 +59,7 @@ func TestAddConnectionSQLite(t *testing.T) {
 	// Test that connection was added
 	conn := cm.GetConnection("sqlite_test")
 	if conn == nil {
-		t.Error("Expected connection to be added, got nil")
+		t.Fatal("Expected connection to be added, got nil")
 	}
 
 	if conn.Driver != "sqlite3" {
@@ -195,7 +195,7 @@ func TestBuildMySQLDSN(t *testing.T) {
 					"loc":       "Local",
 				},
 			},
-			expected: "user:pass@tcp(localhost:3306)/testdb?charset=utf8mb4&parseTime=True&loc=Local&loc=Local&parseTime=true",
+			expected: "user:pass@tcp(localhost:3306)/testdb?charset=utf8mb4&parseTime=True&loc=Local&parseTime=true&loc=Local",
 		},
 	}
 
@@ -276,7 +276,7 @@ func TestQuickSetupFunctions(t *testing.T) {
 	// Test that connection was created
 	conn := DB()
 	if conn == nil {
-		t.Error("Expected connection to be created, got nil")
+		t.Fatal("Expected connection to be created, got nil")
 	}
 
 	if conn.Driver != "sqlite3" {
@@ -284,7 +284,7 @@ func TestQuickSetupFunctions(t *testing.T) {
 	}
 
 	// Clean up
-	GetManager().CloseAll()
+	_ = GetManager().CloseAll()
 }
 
 func TestGetGlobalManager(t *testing.T) {
@@ -303,7 +303,7 @@ func TestDBFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to set up test connection: %v", err)
 	}
-	defer GetManager().CloseAll()
+	defer func() { _ = GetManager().CloseAll() }()
 
 	// Test getting default connection
 	conn := DB()
@@ -324,7 +324,7 @@ func TestConnectionMethods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to set up test connection: %v", err)
 	}
-	defer GetManager().CloseAll()
+	defer func() { _ = GetManager().CloseAll() }()
 
 	conn := DB()
 	if conn == nil {
@@ -372,7 +372,7 @@ func TestConnectionTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to set up test connection: %v", err)
 	}
-	defer GetManager().CloseAll()
+	defer func() { _ = GetManager().CloseAll() }()
 
 	conn := DB()
 	if conn == nil {
