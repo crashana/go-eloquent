@@ -75,7 +75,7 @@ func setupTestDB(t *testing.T) {
 }
 
 func teardownTestDB() {
-	eloquent.GetManager().CloseAll()
+	_ = eloquent.GetManager().CloseAll()
 }
 
 func TestModelCreate(t *testing.T) {

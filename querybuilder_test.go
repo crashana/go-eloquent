@@ -76,7 +76,7 @@ func setupQueryBuilderTestDB(t *testing.T) {
 }
 
 func teardownQueryBuilderTestDB() {
-	GetManager().CloseAll()
+	_ = GetManager().CloseAll()
 }
 
 func TestQueryBuilderBasicSelect(t *testing.T) {

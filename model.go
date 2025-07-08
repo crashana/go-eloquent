@@ -1096,7 +1096,10 @@ func toSnakeCase(str string) string {
 func generateID() string {
 	// Generate a UUID-like string
 	b := make([]byte, 16)
-	cryptoRand.Read(b)
+	if _, err := cryptoRand.Read(b); err != nil {
+		// Fallback to a simple timestamp-based ID if crypto rand fails
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
 
 	// Format as UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
 	return fmt.Sprintf("%x-%x-4%x-%x%x-%x",

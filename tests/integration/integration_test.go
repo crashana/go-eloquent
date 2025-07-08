@@ -76,7 +76,7 @@ func setupIntegrationDB(t *testing.T) {
 }
 
 func teardownIntegrationDB() {
-	eloquent.GetManager().CloseAll()
+	_ = eloquent.GetManager().CloseAll()
 }
 
 func TestIntegrationFullCRUDWorkflow(t *testing.T) {

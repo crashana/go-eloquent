@@ -92,7 +92,7 @@ func setupRelationshipTestDB(t *testing.T) {
 }
 
 func teardownRelationshipTestDB() {
-	GetManager().CloseAll()
+	_ = GetManager().CloseAll()
 }
 
 func TestRelationshipBuilder(t *testing.T) {
