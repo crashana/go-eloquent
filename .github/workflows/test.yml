@@ -68,6 +68,7 @@ jobs:
 
   integration-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     strategy:
       matrix:
@@ -92,11 +93,13 @@ jobs:
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: eloquent_test
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
         options: >-
-          --health-cmd="mysqladmin ping"
+          --health-cmd="mysqladmin ping --silent"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=3
+          --health-retries=5
         ports:
           - 3306:3306
     
@@ -153,15 +156,31 @@ jobs:
     - name: Wait for services
       run: |
         if [ "${{ matrix.database }}" = "postgres" ]; then
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for PostgreSQL..."
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "PostgreSQL is ready!"
+              break
+            fi
+            echo "Waiting for PostgreSQL... (attempt $i/30)"
             sleep 2
           done
+          # Test connection
+          echo "Testing PostgreSQL connection..."
+          PGPASSWORD=postgres psql -h localhost -U postgres -d eloquent_test -c "SELECT 1;" || echo "Connection test failed"
         elif [ "${{ matrix.database }}" = "mysql" ]; then
-          until mysqladmin ping -h localhost -u root -proot --silent; do
-            echo "Waiting for MySQL..."
+          echo "Waiting for MySQL to be ready..."
+          for i in {1..30}; do
+            if mysqladmin ping -h localhost -u root --password=root --silent; then
+              echo "MySQL is ready!"
+              break
+            fi
+            echo "Waiting for MySQL... (attempt $i/30)"
             sleep 2
           done
+          # Test connection
+          echo "Testing MySQL connection..."
+          mysql -h localhost -u root --password=root -e "USE eloquent_test; SELECT 1;" || echo "Connection test failed"
         fi
     
     - name: Run integration tests
