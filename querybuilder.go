@@ -573,6 +573,16 @@ func (qb *QueryBuilder) clone() *QueryBuilder {
 func (qb *QueryBuilder) ToSQL() (string, []interface{}) {
 	var sql strings.Builder
 	var args []interface{}
+	var placeholderIndex int
+
+	// Helper function to get the correct placeholder based on database driver
+	getPlaceholder := func() string {
+		placeholderIndex++
+		if qb.connection != nil && qb.connection.Driver == "postgres" {
+			return fmt.Sprintf("$%d", placeholderIndex)
+		}
+		return "?"
+	}
 
 	// SELECT clause
 	sql.WriteString("SELECT ")
@@ -616,7 +626,8 @@ func (qb *QueryBuilder) ToSQL() (string, []interface{}) {
 				sql.WriteString(where.Column)
 				sql.WriteString(" ")
 				sql.WriteString(where.Operator)
-				sql.WriteString(" ?")
+				sql.WriteString(" ")
+				sql.WriteString(getPlaceholder())
 				args = append(args, where.Value)
 			case "in":
 				sql.WriteString(where.Column)
@@ -627,7 +638,7 @@ func (qb *QueryBuilder) ToSQL() (string, []interface{}) {
 				}
 				placeholders := make([]string, len(where.Values))
 				for j, val := range where.Values {
-					placeholders[j] = "?"
+					placeholders[j] = getPlaceholder()
 					args = append(args, val)
 				}
 				sql.WriteString(strings.Join(placeholders, ", "))
@@ -641,7 +652,10 @@ func (qb *QueryBuilder) ToSQL() (string, []interface{}) {
 				}
 			case "between":
 				sql.WriteString(where.Column)
-				sql.WriteString(" BETWEEN ? AND ?")
+				sql.WriteString(" BETWEEN ")
+				sql.WriteString(getPlaceholder())
+				sql.WriteString(" AND ")
+				sql.WriteString(getPlaceholder())
 				args = append(args, where.Values[0], where.Values[1])
 			}
 		}
@@ -665,7 +679,8 @@ func (qb *QueryBuilder) ToSQL() (string, []interface{}) {
 			sql.WriteString(having.Column)
 			sql.WriteString(" ")
 			sql.WriteString(having.Operator)
-			sql.WriteString(" ?")
+			sql.WriteString(" ")
+			sql.WriteString(getPlaceholder())
 			args = append(args, having.Value)
 		}
 	}
@@ -682,13 +697,15 @@ func (qb *QueryBuilder) ToSQL() (string, []interface{}) {
 
 	// LIMIT clause
 	if qb.limitValue != nil {
-		sql.WriteString(" LIMIT ?")
+		sql.WriteString(" LIMIT ")
+		sql.WriteString(getPlaceholder())
 		args = append(args, *qb.limitValue)
 	}
 
 	// OFFSET clause
 	if qb.offsetValue != nil {
-		sql.WriteString(" OFFSET ?")
+		sql.WriteString(" OFFSET ")
+		sql.WriteString(getPlaceholder())
 		args = append(args, *qb.offsetValue)
 	}
 

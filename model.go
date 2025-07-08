@@ -81,6 +81,13 @@ type ModelQueryBuilder struct {
 	model Model
 }
 
+// TypedModelQueryBuilder wraps QueryBuilder and returns typed model instances
+type TypedModelQueryBuilder[T Model] struct {
+	*QueryBuilder
+	model        Model
+	modelFactory func() T
+}
+
 // NewModelQueryBuilder creates a new model query builder
 func NewModelQueryBuilder(model Model) *ModelQueryBuilder {
 	db := DB()
@@ -238,14 +245,50 @@ func (mqb *ModelQueryBuilder) Skip(offset int) *ModelQueryBuilder {
 func (mqb *ModelQueryBuilder) newModelInstance() Model {
 	modelType := reflect.TypeOf(mqb.model).Elem()
 	newModel := reflect.New(modelType).Interface().(Model)
+
+	// Initialize embedded BaseModel if it exists
+	modelValue := reflect.ValueOf(newModel)
+	if modelValue.Kind() == reflect.Ptr {
+		modelValue = modelValue.Elem()
+	}
+
+	// Look for embedded BaseModel field and initialize it
+	for i := 0; i < modelValue.NumField(); i++ {
+		field := modelValue.Field(i)
+		if field.Type() == reflect.TypeOf((*BaseModel)(nil)) && field.CanSet() {
+			field.Set(reflect.ValueOf(NewBaseModel()))
+			break
+		}
+	}
+
 	return newModel
 }
 
 // fillModelFromMap fills a model with data from a map
 func (mqb *ModelQueryBuilder) fillModelFromMap(model Model, data map[string]interface{}) {
-	if baseModel, ok := model.(*BaseModel); ok {
-		baseModel.attributes = make(map[string]interface{})
-		baseModel.original = make(map[string]interface{})
+	// Use reflection to find the embedded BaseModel
+	modelValue := reflect.ValueOf(model)
+	if modelValue.Kind() == reflect.Ptr {
+		modelValue = modelValue.Elem()
+	}
+
+	// Look for embedded BaseModel field
+	var baseModel *BaseModel
+	for i := 0; i < modelValue.NumField(); i++ {
+		field := modelValue.Field(i)
+		if field.Type() == reflect.TypeOf((*BaseModel)(nil)) {
+			baseModel = field.Interface().(*BaseModel)
+			break
+		}
+	}
+
+	if baseModel != nil {
+		if baseModel.attributes == nil {
+			baseModel.attributes = make(map[string]interface{})
+		}
+		if baseModel.original == nil {
+			baseModel.original = make(map[string]interface{})
+		}
 
 		for key, value := range data {
 			baseModel.attributes[key] = value
@@ -254,6 +297,90 @@ func (mqb *ModelQueryBuilder) fillModelFromMap(model Model, data map[string]inte
 
 		baseModel.exists = true
 		baseModel.wasRecentlyCreated = false
+	}
+
+	// Auto-sync attributes to struct fields
+	mqb.autoSyncAttributes(model, data)
+}
+
+// autoSyncAttributes automatically syncs database attributes to struct fields
+func (mqb *ModelQueryBuilder) autoSyncAttributes(model Model, data map[string]interface{}) {
+	modelValue := reflect.ValueOf(model)
+	if modelValue.Kind() == reflect.Ptr {
+		modelValue = modelValue.Elem()
+	}
+
+	modelType := modelValue.Type()
+
+	// Iterate through all struct fields
+	for i := 0; i < modelValue.NumField(); i++ {
+		field := modelValue.Field(i)
+		fieldType := modelType.Field(i)
+
+		// Skip unexported fields and BaseModel
+		if !field.CanSet() || fieldType.Type == reflect.TypeOf((*BaseModel)(nil)) {
+			continue
+		}
+
+		// Get the database column name from the db tag, or use field name
+		dbTag := fieldType.Tag.Get("db")
+		if dbTag == "" {
+			dbTag = toSnakeCase(fieldType.Name)
+		}
+
+		// Check if we have data for this field
+		if value, exists := data[dbTag]; exists && value != nil {
+			mqb.setFieldValue(field, value)
+		}
+	}
+}
+
+// setFieldValue sets a struct field value with proper type conversion
+func (mqb *ModelQueryBuilder) setFieldValue(field reflect.Value, value interface{}) {
+	if !field.CanSet() {
+		return
+	}
+
+	valueType := reflect.TypeOf(value)
+	fieldType := field.Type()
+
+	// Handle different type conversions
+	switch fieldType.Kind() {
+	case reflect.String:
+		if str, ok := value.(string); ok {
+			field.SetString(str)
+		}
+	case reflect.Bool:
+		if b, ok := value.(bool); ok {
+			field.SetBool(b)
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if i, ok := value.(int64); ok {
+			field.SetInt(i)
+		} else if i, ok := value.(int); ok {
+			field.SetInt(int64(i))
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if u, ok := value.(uint64); ok {
+			field.SetUint(u)
+		} else if u, ok := value.(uint); ok {
+			field.SetUint(uint64(u))
+		}
+	case reflect.Float32, reflect.Float64:
+		if f, ok := value.(float64); ok {
+			field.SetFloat(f)
+		} else if f, ok := value.(float32); ok {
+			field.SetFloat(float64(f))
+		}
+	default:
+		// Handle time.Time and other types
+		if fieldType == reflect.TypeOf(time.Time{}) {
+			if t, ok := value.(time.Time); ok {
+				field.Set(reflect.ValueOf(t))
+			}
+		} else if valueType.AssignableTo(fieldType) {
+			field.Set(reflect.ValueOf(value))
+		}
 	}
 }
 
@@ -693,4 +820,251 @@ func generateID() string {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+// Static-like methods that work like Laravel
+// These create a new instance and return the query builder
+
+// Where creates a new query with where clause (static-like)
+func Where(model Model, column string, args ...interface{}) *ModelQueryBuilder {
+	return NewModelQueryBuilder(model).Where(column, args...)
+}
+
+// First gets the first record (static-like)
+func First(model Model) (Model, error) {
+	return NewModelQueryBuilder(model).First()
+}
+
+// All gets all records (static-like)
+func All(model Model) ([]Model, error) {
+	return NewModelQueryBuilder(model).Get()
+}
+
+// Find finds by primary key (static-like)
+func Find(model Model, id interface{}) (Model, error) {
+	return NewModelQueryBuilder(model).Find(id)
+}
+
+// Create creates a new record (static-like)
+func Create(model Model, attributes map[string]interface{}) (Model, error) {
+	newModel := model
+	if baseModel, ok := newModel.(*BaseModel); ok {
+		baseModel.Fill(attributes)
+		err := baseModel.Save()
+		if err != nil {
+			return nil, err
+		}
+		return newModel, nil
+	}
+	return nil, fmt.Errorf("model does not support Create")
+}
+
+// ModelStatic provides Laravel-style static methods for any model
+type ModelStatic[T Model] struct {
+	modelFactory func() T
+}
+
+// NewModelStatic creates a new ModelStatic instance for any model type
+func NewModelStatic[T Model](factory func() T) *ModelStatic[T] {
+	return &ModelStatic[T]{
+		modelFactory: factory,
+	}
+}
+
+// Where creates a new query with where clause (static-like)
+func (ms *ModelStatic[T]) Where(column string, args ...interface{}) *TypedModelQueryBuilder[T] {
+	model := ms.modelFactory()
+	qb := NewModelQueryBuilder(model).Where(column, args...)
+	return &TypedModelQueryBuilder[T]{
+		QueryBuilder: qb.QueryBuilder,
+		model:        model,
+		modelFactory: ms.modelFactory,
+	}
+}
+
+// First gets the first record (static-like) - returns the typed model directly
+func (ms *ModelStatic[T]) First() (T, error) {
+	model := ms.modelFactory()
+	result, err := NewModelQueryBuilder(model).First()
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return result.(T), nil
+}
+
+// All gets all records (static-like) - returns slice of typed models
+func (ms *ModelStatic[T]) All() ([]T, error) {
+	model := ms.modelFactory()
+	results, err := NewModelQueryBuilder(model).Get()
+	if err != nil {
+		return nil, err
+	}
+
+	typedResults := make([]T, len(results))
+	for i, result := range results {
+		typedResults[i] = result.(T)
+	}
+	return typedResults, nil
+}
+
+// Find finds by primary key (static-like) - returns the typed model directly
+func (ms *ModelStatic[T]) Find(id interface{}) (T, error) {
+	model := ms.modelFactory()
+	result, err := NewModelQueryBuilder(model).Find(id)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return result.(T), nil
+}
+
+// Create creates a new record (static-like) - returns the typed model directly
+func (ms *ModelStatic[T]) Create(attributes map[string]interface{}) (T, error) {
+	model := ms.modelFactory()
+	if baseModel, ok := any(model).(*BaseModel); ok {
+		baseModel.Fill(attributes)
+		err := baseModel.Save()
+		if err != nil {
+			var zero T
+			return zero, err
+		}
+		return model, nil
+	}
+	var zero T
+	return zero, fmt.Errorf("model does not support Create")
+}
+
+// Get gets all records (alias for All) - returns slice of typed models
+func (ms *ModelStatic[T]) Get() ([]T, error) {
+	return ms.All()
+}
+
+// Methods for TypedModelQueryBuilder
+
+// First returns the first typed model instance
+func (tmqb *TypedModelQueryBuilder[T]) First() (T, error) {
+	result, err := tmqb.QueryBuilder.First()
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+
+	model := tmqb.modelFactory()
+	mqb := &ModelQueryBuilder{
+		QueryBuilder: tmqb.QueryBuilder,
+		model:        model,
+	}
+	mqb.fillModelFromMap(model, result)
+	return model, nil
+}
+
+// Get returns multiple typed model instances
+func (tmqb *TypedModelQueryBuilder[T]) Get() ([]T, error) {
+	results, err := tmqb.QueryBuilder.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	var models []T
+	for _, result := range results {
+		model := tmqb.modelFactory()
+		mqb := &ModelQueryBuilder{
+			QueryBuilder: tmqb.QueryBuilder,
+			model:        model,
+		}
+		mqb.fillModelFromMap(model, result)
+		models = append(models, model)
+	}
+
+	return models, nil
+}
+
+// Find finds a typed model by primary key
+func (tmqb *TypedModelQueryBuilder[T]) Find(id interface{}) (T, error) {
+	result, err := tmqb.QueryBuilder.Find(id)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+
+	model := tmqb.modelFactory()
+	mqb := &ModelQueryBuilder{
+		QueryBuilder: tmqb.QueryBuilder,
+		model:        model,
+	}
+	mqb.fillModelFromMap(model, result)
+	return model, nil
+}
+
+// Where adds a where clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) Where(column string, args ...interface{}) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.Where(column, args...)
+	return tmqb
+}
+
+// OrWhere adds an OR where clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) OrWhere(column string, args ...interface{}) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.OrWhere(column, args...)
+	return tmqb
+}
+
+// WhereIn adds a where in clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) WhereIn(column string, values []interface{}) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.WhereIn(column, values)
+	return tmqb
+}
+
+// WhereNotIn adds a where not in clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) WhereNotIn(column string, values []interface{}) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.WhereNotIn(column, values)
+	return tmqb
+}
+
+// WhereNull adds a where null clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) WhereNull(column string) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.WhereNull(column)
+	return tmqb
+}
+
+// WhereNotNull adds a where not null clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) WhereNotNull(column string) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.WhereNotNull(column)
+	return tmqb
+}
+
+// OrderBy adds an order by clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) OrderBy(column, direction string) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.OrderBy(column, direction)
+	return tmqb
+}
+
+// OrderByDesc adds an order by desc clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) OrderByDesc(column string) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.OrderByDesc(column)
+	return tmqb
+}
+
+// Limit adds a limit clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) Limit(limit int) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.Limit(limit)
+	return tmqb
+}
+
+// Take adds a limit clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) Take(limit int) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.Take(limit)
+	return tmqb
+}
+
+// Offset adds an offset clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) Offset(offset int) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.Offset(offset)
+	return tmqb
+}
+
+// Skip adds an offset clause and returns TypedModelQueryBuilder
+func (tmqb *TypedModelQueryBuilder[T]) Skip(offset int) *TypedModelQueryBuilder[T] {
+	tmqb.QueryBuilder.Skip(offset)
+	return tmqb
 }

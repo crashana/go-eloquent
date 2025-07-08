@@ -371,15 +371,6 @@ func CreateScope(name string, fn func(*QueryBuilder, ...interface{})) func(...in
 	}
 }
 
-// Example usage of dynamic scopes:
-// var WhereColumnScope = CreateScope("whereColumn", func(qb *QueryBuilder, args ...interface{}) {
-//     if len(args) >= 2 {
-//         qb.Where(args[0].(string), args[1])
-//     }
-// })
-//
-// Usage: query.Apply(WhereColumnScope("name", "John"))
-
 // Scope utilities
 
 // ScopeExists checks if a scope exists in the registry
