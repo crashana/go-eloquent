@@ -109,6 +109,16 @@ check: deps vet lint test ## Run all checks (deps, vet, lint, test)
 
 ci: deps vet test-coverage-ci ## Run CI pipeline
 
+validate-github: ## Validate GitHub Actions workflow locally
+	@echo "Validating GitHub Actions workflow..."
+	@chmod +x scripts/validate-github-actions.sh
+	@./scripts/validate-github-actions.sh
+
+validate-gitlab: ## Validate GitLab CI pipeline locally
+	@echo "Validating GitLab CI pipeline..."
+	@chmod +x scripts/validate-ci.sh
+	@./scripts/validate-ci.sh
+
 docker-test: ## Run tests in Docker
 	docker run --rm -v $(PWD):/app -w /app golang:1.21 make test
 
